@@ -12,14 +12,17 @@ where P : AsRef<Path>, {
 
 const K : usize = 3;
 
-// We call this continuously for all inputs. If the array given is 
-fn top_small_k(top : &mut [i32; K], n : &mut usize, next : i32) -> Result<(), Box<dyn Error>> {
+// We call this continuously for each input, and it updates the data structure.
+// We choose to do 'find the smallest in an unsorted vector and replace that'
+// approach because K is very small here. Should definetely be factored out
+// into its own struct!
+fn top_small_k_inputstream(top : &mut [i32; K], n : &mut usize, next : i32) -> Result<(), Box<dyn Error>> {
   if *n < K {
     // just add it to the list
     top[*n] = next;
     *n += 1;
   } else {
-    // Replace smallest of the values, assuming we keep them sorted
+    // Replace smallest of the values
     let curr_smallest = top.iter_mut().min().expect("Should be non-zero number of elements in array");
     if *curr_smallest < next {
       *curr_smallest = next;
@@ -39,7 +42,7 @@ fn main() -> Result<(), Box<dyn Error>> {
       for line in lines {
         if let Ok(s) = line {
           if s.is_empty() {
-            top_small_k(& mut max_calorie_counts, &mut n, calorie_count)?;
+            top_small_k_inputstream(& mut max_calorie_counts, &mut n, calorie_count)?;
             calorie_count = 0;
           } else {
             calorie_count += s.parse::<i32>().unwrap();
