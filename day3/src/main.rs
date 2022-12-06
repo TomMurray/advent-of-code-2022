@@ -60,7 +60,6 @@ fn main() -> Result<(), Box<dyn Error>> {
             let sack = Rucksack::new(&l);
             let dup = sack.find_duplicate().expect("should always be a duplicate in a valid sack");
             let prio : u64 = to_priority(dup).into();
-            println!("Found duplicate in sack {} with priority {}", dup, prio);
             total_prios += prio;
         }
     }
