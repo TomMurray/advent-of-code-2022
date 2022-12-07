@@ -2,8 +2,7 @@
 use std::{env, fs::File, io::{BufReader, BufRead}, error::Error};
 
 struct Rucksack<'a> {
-    a : &'a str,
-    b : &'a str
+    s : &'a str
 }
 
 
@@ -17,24 +16,31 @@ fn to_priority(c : u8) -> u8 {
     }
 }
 
+fn get_item_mask(s : &str) -> u64 {
+    let mut mask : u64 = 0;
+    // We know that only ascii chars are used here
+    for c in s.bytes() {
+        let b = to_priority(c);
+        mask |= 1u64 << b;
+    }
+    mask
+}
+
 impl<'a> Rucksack<'a> {
     fn new(s : &'a str) -> Rucksack<'a> {
         assert!(s.len() % 2 == 0);
         Rucksack {
-            a: &s[0..s.len() / 2],
-            b: &s[s.len() / 2..s.len()]
+            s
         }
     }
 
     fn find_duplicate(&self) -> Option<u8> {
-        let mut contained : u64 = 0;
-        // We know that only ascii chars are used here
-        for c in self.a.bytes() {
-            let b = to_priority(c);
-            contained |= 1u64 << b;
-        }
+        let lhs : &str = &self.s[0..self.s.len() / 2];
+        let rhs : &str = &self.s[(self.s.len() / 2)..self.s.len()];
 
-        for c in self.b.bytes() {
+        let contained = get_item_mask(lhs);
+
+        for c in rhs.bytes() {
             let b = to_priority(c);
             let found = contained & (1u64 << b) != 0;
             if found {
