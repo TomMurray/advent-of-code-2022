@@ -12,11 +12,43 @@ use regex::Regex;
 struct Stacks(Vec<Vec<char>>);
 
 impl Stacks {
-    fn mov(&mut self, from: usize, to: usize) {
+    // Lifetime elision rule should be filling this out
+    // I wrote out lifetimes explicitly to satisfy myself that despite
+    // contained unsafe code this remains true.
+    fn get_mut_stack_pair<'a>(
+        &'a mut self,
+        (a, b): (usize, usize),
+    ) -> (&'a mut Vec<char>, &'a mut Vec<char>) {
+        // In order to get a mutable reference to source and dest
+        // we require some unsafe code. We know that source and dest
+        // never overlap and we panic if they are at runtime for some
+        // unexpected reason.
+        assert!(a != b);
+        unsafe {
+            // To explain this bit of magic for myself,
+            // each of these lines first takes a mutable reference to
+            // the sub-element we want, then casts it to a pointer (unsafe)
+            // then casts it back to a mutable reference. This
+            // avoids the borrow checker acting for the input &mut self
+            // and instead we get 2 new &mut Vec<char> that themselves
+            // have borrow checking.
+            (
+                &mut *(&mut self.0[a] as *mut _),
+                &mut *(&mut self.0[b] as *mut _),
+            )
+        }
+    }
+
+    /// Move crates from one stack to another.
+    /// This has the 'part 2' behaviour that when > 1 are
+    /// moved at a time, their relative ordering is maintained
+    /// in the move. The 'part 1' behaviour can be implemented on
+    /// top of this by only moving one crate at a time.
+    fn mov(&mut self, count: usize, from: usize, to: usize) {
         assert!(from < self.0.len() && to < self.0.len());
-        let c = self.0[from].pop();
-        let Some(c) = c else { return };
-        self.0[to].push(c);
+        let (from_stack, to_stack) = self.get_mut_stack_pair((from, to));
+        let crates = from_stack.drain(from_stack.len() - count..);
+        to_stack.extend(crates);
     }
 }
 
@@ -92,7 +124,8 @@ fn parse_stacks(lines: &mut Lines<BufReader<File>>) -> Stacks {
 
                 // Check for column numbering
                 if second_char >= '0' && second_char <= '9' {
-                    // End iteration over lines. Next line should be instructions (ignoring blank lines)
+                    // End iteration over lines.
+                    // Next line should be instructions (ignoring blank lines)
                     let third_char = it.next().unwrap();
                     assert!(third_char == ' ');
                     break 'outer;
@@ -109,7 +142,8 @@ fn parse_stacks(lines: &mut Lines<BufReader<File>>) -> Stacks {
 
         first_line = false;
     }
-    // When we are done with this, all the columns will be upside down because we parsed them that way. Reverse them now.
+    // When we are done with this, all the stacks will be upside down
+    // because we parsed them that way. Reverse them now.
     for column in &mut contents {
         column.reverse();
     }
@@ -140,9 +174,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .collect();
             let (count, from, to) = (parsed[0], parsed[1], parsed[2]);
             println!("Move {} boxes from column {} to column {}", count, from, to);
-            for _ in 0..count {
-                stacks.mov(from - 1, to - 1);
-            }
+            stacks.mov(count, from - 1, to - 1);
+            // Part 1 behaviour:
+            // for _ in 0..count {
+            //     stacks.mov(1, from - 1, to - 1);
+            // }
         }
     }
 
