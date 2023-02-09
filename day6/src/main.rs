@@ -29,31 +29,32 @@ impl fmt::Display for MarkerNotFoundError {
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let input = &args[1];
+    let marker_len: usize = args[2].parse()?;
     // Read in the input in one chunk. We have a single line input to parse.
     let input: Vec<u8> = fs::read_to_string(input)?.bytes().collect();
 
-    // As we have a window of just 4 characters it actually seems very reasonable
-    // to just build a bitset at each starting character
-
-    if input.len() < 4 {
+    // The method is very simple. We assume the window length is not too long
+    // and we just build a bitset each time and count the bits in order to
+    // determine if we have found the marker
+    if input.len() < marker_len {
         return Err(Box::new(InputTooShortError));
     }
-    assert!(input.len() >= 4);
+    assert!(input.len() >= marker_len);
     let mut found_idx: Option<usize> = None;
-    'outer: for idx in 0..input.len() - 4 {
-        let slice = &input[idx..idx + 4];
+    'outer: for idx in 0..input.len() - marker_len {
+        let slice = &input[idx..idx + marker_len];
         let mut bits: u32 = 0;
         for c in slice {
             bits |= 1u32 << to_idx(*c);
         }
-        if bits.count_ones() == 4 as u32 {
+        if bits.count_ones() == slice.len() as u32 {
             // We found the marker
             found_idx = Some(idx);
             break 'outer;
         }
     }
     if let Some(idx) = found_idx {
-        println!("Found marker in range {}..{}", idx, idx + 4);
+        println!("Found marker in range {}..{}", idx, idx + marker_len);
     } else {
         return Err(Box::new(MarkerNotFoundError));
     }
