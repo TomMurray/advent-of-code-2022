@@ -45,13 +45,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         let slice = &input[idx..idx + marker_len];
         let mut bits: u32 = 0;
         for c in slice {
+            let prev = bits;
             bits |= 1u32 << to_idx(*c);
+            if bits == prev {
+                // If bits didn't change, we know there were duplicate letters so break
+                continue 'outer;
+            }
         }
-        if bits.count_ones() == slice.len() as u32 {
-            // We found the marker
-            found_idx = Some(idx);
-            break 'outer;
-        }
+        found_idx = Some(idx);
+        break;
     }
     if let Some(idx) = found_idx {
         println!("Found marker in range {}..{}", idx, idx + marker_len);
