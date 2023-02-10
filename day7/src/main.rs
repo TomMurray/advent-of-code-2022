@@ -4,7 +4,7 @@ use std::{
     error::Error,
     fmt,
     fs::File,
-    io::{self, BufRead, BufReader},
+    io::{self, BufRead, BufReader, Write},
     rc::{Rc, Weak},
 };
 
@@ -106,10 +106,9 @@ impl DirectoryTree {
             node_type: DirectoryTreeNodeType::Directory,
         }
     }
-}
 
-impl fmt::Display for DirectoryTree {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn path_name(&self) -> String {
+        let mut buf: Vec<u8> = Vec::new();
         let mut next = self.parent.clone();
         let mut path_stack = vec![];
         while let Some(parent) = next.upgrade() {
@@ -117,9 +116,16 @@ impl fmt::Display for DirectoryTree {
             next = parent.borrow().parent.clone();
         }
         for part in path_stack.into_iter().rev() {
-            write!(f, "{}/", part.borrow().name)?;
+            write!(buf, "{}/", part.borrow().name).unwrap();
         }
-        write!(f, "{}", self.name)?;
+        write!(buf, "{}", self.name).unwrap();
+        std::str::from_utf8(&buf[..]).unwrap().to_string()
+    }
+}
+
+impl fmt::Display for DirectoryTree {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.path_name())?;
         if let DirectoryTreeNodeType::File(size) = self.node_type {
             write!(f, " size {}", size)?;
         }
@@ -216,6 +222,37 @@ fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
     Ok(root_node)
 }
 
+type ProblemResult = Vec<(Rc<RefCell<DirectoryTree>>, usize)>;
+fn get_directories_within_size_limit_aux(
+    tree: &Rc<RefCell<DirectoryTree>>,
+    limit: usize,
+    res: &mut ProblemResult,
+) -> usize {
+    if let DirectoryTreeNodeType::File(size) = tree.borrow().node_type {
+        size
+    } else {
+        let mut total_size: usize = 0;
+        for child in &tree.borrow().children {
+            total_size += get_directories_within_size_limit_aux(&child, limit, res);
+        }
+
+        if total_size <= limit {
+            res.push((tree.clone(), total_size));
+        }
+
+        total_size
+    }
+}
+
+fn get_directories_within_size_limit(
+    tree: &Rc<RefCell<DirectoryTree>>,
+    limit: usize,
+) -> ProblemResult {
+    let mut res = vec![];
+    get_directories_within_size_limit_aux(tree, limit, &mut res);
+    res
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let input = &args[1];
@@ -225,8 +262,28 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut line_iter = BufReader::new(input).lines().into_iter();
     let directory_tree = process_commands(&mut line_iter)?;
 
-    // Print out the directory tree for now
+    // Print out the directory tree just ot see if it looks correct
     println!("{}", directory_tree.borrow());
+
+    // Now calculate the answer we're looking for.
+    // Using a DFS of directory tree we identify the size of each
+    // directory during iteration
+    const SIZE_LIMIT: usize = 100000;
+    let directories = get_directories_within_size_limit(&directory_tree, SIZE_LIMIT);
+
+    println!("Directories under {} in size:", SIZE_LIMIT);
+    for (dir, total_size) in &directories {
+        println!(
+            "Directory {} had total size {}",
+            dir.borrow().path_name(),
+            total_size
+        );
+    }
+    let total_size_of_all_under_limit: usize = (&directories).into_iter().map(|e| e.1).sum();
+    println!(
+        "Sum of all directories under {} in size was {}",
+        SIZE_LIMIT, total_size_of_all_under_limit
+    );
 
     Ok(())
 }
