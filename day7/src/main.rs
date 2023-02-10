@@ -62,7 +62,11 @@ impl Error for NotACdEntryError {}
 
 impl fmt::Display for NotACdEntryError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "The following line is not a valid cd output line: {}", self.0)
+        write!(
+            f,
+            "The following line is not a valid cd output line: {}",
+            self.0
+        )
     }
 }
 
@@ -74,19 +78,23 @@ enum DirectoryTreeNodeType {
 
 #[derive(Debug, Clone)]
 struct DirectoryTree {
-    parent: Weak<DirectoryTree>,
-    children: Vec<Rc<DirectoryTree>>,
+    parent: Weak<RefCell<DirectoryTree>>,
+    children: Vec<Rc<RefCell<DirectoryTree>>>,
     name: String,
     node_type: DirectoryTreeNodeType,
 }
 
 impl DirectoryTree {
-    fn new(name: String, parent: Weak<DirectoryTree>, node_type : DirectoryTreeNodeType) -> Self {
+    fn new(
+        name: String,
+        parent: Weak<RefCell<DirectoryTree>>,
+        node_type: DirectoryTreeNodeType,
+    ) -> Self {
         Self {
             parent,
             children: vec![],
             name,
-            node_type
+            node_type,
         }
     }
 
@@ -102,24 +110,40 @@ impl DirectoryTree {
 
 impl fmt::Display for DirectoryTree {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(parent) = self.parent.upgrade() {
-            parent.fmt(f)?;
+        let mut next = self.parent.clone();
+        let mut path_stack = vec![];
+        while let Some(parent) = next.upgrade() {
+            path_stack.push(parent.clone());
+            next = parent.borrow().parent.clone();
         }
-        write!(f, "{}/", self.name)
+        for part in path_stack.into_iter().rev() {
+            write!(f, "{}/", part.borrow().name)?;
+        }
+        write!(f, "{}", self.name)?;
+        if let DirectoryTreeNodeType::File(size) = self.node_type {
+            write!(f, " size {}", size)?;
+        }
+        writeln!(f, "")?;
+
+        // Print children recursively
+        for child in &self.children {
+            child.borrow().fmt(f)?;
+        }
+        Ok(())
     }
 }
 
 // We will need some struct to track directory structure etc.
 fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
     lines: &mut LinesIter,
-) -> Result<Rc<DirectoryTree>, Box<dyn Error>> {
-    let mut root_node = Rc::new(DirectoryTree::root());
+) -> Result<Rc<RefCell<DirectoryTree>>, Box<dyn Error>> {
+    let root_node = Rc::new(RefCell::new(DirectoryTree::root()));
 
-    let mut curr_node: Rc<DirectoryTree> = root_node.clone();
+    let mut curr_node = root_node.clone();
     let mut ls = false;
     while let Some(Ok(line)) = lines.next() {
         if &line[0..2] == "$ " {
-            let cmd_token = &line[2..];
+            let cmd_token = &line[2..4];
             match cmd_token {
                 "ls" => {
                     ls = true;
@@ -130,15 +154,16 @@ fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
                         "/" => root_node.clone(),
                         ".." => {
                             // Get parent node
-                            if let Some(parent) = curr_node.parent.upgrade() {
+                            if let Some(parent) = curr_node.borrow().parent.upgrade() {
                                 parent.clone()
                             } else {
                                 return Err(Box::new(NoParentError));
                             }
                         }
                         _ => {
-                            if let Some(child) =
-                                (&curr_node.children).into_iter().find(|x| x.name == arg)
+                            if let Some(child) = (&curr_node.borrow().children)
+                                .into_iter()
+                                .find(|x| x.borrow().name == arg)
                             {
                                 child.clone()
                             } else {
@@ -148,9 +173,10 @@ fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
                     }
                 }
                 _ => {
-                    return Err(Box::new(NotACommandError(
-                        "Line must start with '$ '".to_string(),
-                    )))
+                    return Err(Box::new(NotACommandError(format!(
+                        "Unrecognised command '{}'",
+                        cmd_token
+                    ))))
                 }
             }
         } else {
@@ -162,17 +188,25 @@ fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
             if line.len() >= 4 && &line[0..4] == "dir " {
                 let dirname = &line[4..];
                 // Insert a new directory below the current node
-                // TODO: Looks like I do need RefCell to actually modify the current node. Makes sense.
-                curr_node.children.push(
-                    Rc::new(DirectoryTree::new(
+                curr_node
+                    .borrow_mut()
+                    .children
+                    .push(Rc::new(RefCell::new(DirectoryTree::new(
                         String::from(dirname),
                         Rc::downgrade(&curr_node),
-                        DirectoryTreeNodeType::Directory
-                    ))
-                );
+                        DirectoryTreeNodeType::Directory,
+                    ))));
             } else {
                 if let Some((size, name)) = line.split_once(' ') {
-
+                    let size: usize = size.parse()?;
+                    curr_node
+                        .borrow_mut()
+                        .children
+                        .push(Rc::new(RefCell::new(DirectoryTree::new(
+                            String::from(name),
+                            Rc::downgrade(&curr_node),
+                            DirectoryTreeNodeType::File(size),
+                        ))))
                 } else {
                     return Err(Box::new(NotACdEntryError(String::from(line))));
                 }
@@ -190,6 +224,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Process commands
     let mut line_iter = BufReader::new(input).lines().into_iter();
     let directory_tree = process_commands(&mut line_iter)?;
+
+    // Print out the directory tree for now
+    println!("{}", directory_tree.borrow());
 
     Ok(())
 }
