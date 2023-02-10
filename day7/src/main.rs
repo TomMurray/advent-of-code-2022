@@ -1,5 +1,6 @@
 use std::{
     cell::RefCell,
+    cmp::min,
     env,
     error::Error,
     fmt,
@@ -222,35 +223,20 @@ fn process_commands<LinesIter: Iterator<Item = io::Result<String>>>(
     Ok(root_node)
 }
 
-type ProblemResult = Vec<(Rc<RefCell<DirectoryTree>>, usize)>;
-fn get_directories_within_size_limit_aux(
+fn iterate_directory_sizes<F: FnMut(&Rc<RefCell<DirectoryTree>>, usize) -> ()>(
     tree: &Rc<RefCell<DirectoryTree>>,
-    limit: usize,
-    res: &mut ProblemResult,
+    f: &mut F,
 ) -> usize {
     if let DirectoryTreeNodeType::File(size) = tree.borrow().node_type {
         size
     } else {
-        let mut total_size: usize = 0;
-        for child in &tree.borrow().children {
-            total_size += get_directories_within_size_limit_aux(&child, limit, res);
-        }
-
-        if total_size <= limit {
-            res.push((tree.clone(), total_size));
-        }
-
+        let total_size = (&tree.borrow().children)
+            .into_iter()
+            .map(|c| iterate_directory_sizes(c, f))
+            .sum();
+        f(tree, total_size);
         total_size
     }
-}
-
-fn get_directories_within_size_limit(
-    tree: &Rc<RefCell<DirectoryTree>>,
-    limit: usize,
-) -> ProblemResult {
-    let mut res = vec![];
-    get_directories_within_size_limit_aux(tree, limit, &mut res);
-    res
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -268,21 +254,47 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Now calculate the answer we're looking for.
     // Using a DFS of directory tree we identify the size of each
     // directory during iteration
-    const SIZE_LIMIT: usize = 100000;
-    let directories = get_directories_within_size_limit(&directory_tree, SIZE_LIMIT);
-
     println!("Directories under {} in size:", SIZE_LIMIT);
-    for (dir, total_size) in &directories {
-        println!(
-            "Directory {} had total size {}",
-            dir.borrow().path_name(),
-            total_size
-        );
-    }
-    let total_size_of_all_under_limit: usize = (&directories).into_iter().map(|e| e.1).sum();
+    const SIZE_LIMIT: usize = 100000;
+    let mut dirs_under_limit = vec![];
+    let used_space = iterate_directory_sizes(&directory_tree, &mut |dir, size| {
+        if size <= SIZE_LIMIT {
+            println!(
+                "Directory {} had total size {}",
+                dir.borrow().path_name(),
+                size
+            );
+            dirs_under_limit.push((dir.clone(), size));
+        }
+    });
+
+    // Seems an ideal situation in which to implement an iterator for the directory sizes.
+    // However the nature of the DFS at the moment is such that maintaining the state required
+    // seems tricky unless we do it through a coroutine because of the state that needs
+    // maintaining in the iterator.
+    let total_size_of_all_under_limit: usize = (&dirs_under_limit).into_iter().map(|e| e.1).sum();
     println!(
         "Sum of all directories under {} in size was {}",
         SIZE_LIMIT, total_size_of_all_under_limit
+    );
+
+    // Part 2
+    // Find the smallest directory that can be deleted that makes the total
+    // filesystem usage less than or equal the target usage. The target usage
+    // is that which leaves enough space for the 'update'
+    const FILESYSTEM_SPACE: usize = 70000000;
+    const UPDATE_SPACE_REQUIRED: usize = 30000000;
+    const TARGET_FILESYSTEM_USAGE: usize = FILESYSTEM_SPACE - UPDATE_SPACE_REQUIRED;
+    let min_space_to_free = used_space - min(used_space, TARGET_FILESYSTEM_USAGE);
+    let mut smallest = usize::MAX;
+    iterate_directory_sizes(&directory_tree, &mut |_, size| {
+        if size >= min_space_to_free {
+            smallest = min(smallest, size);
+        }
+    });
+    println!(
+        "Smallest directory size that would get us under the target size is {}",
+        smallest
     );
 
     Ok(())
