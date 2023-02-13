@@ -60,6 +60,10 @@ impl Vec2 {
         }
     }
 
+    fn zero() -> Self {
+        Vec2::new()
+    }
+
     fn up() -> Self {
         Self { x: 0, y: 1 }
     }
@@ -119,13 +123,16 @@ fn main() -> Result<(), Box<dyn Error>> {
     let input = &args[1];
     let input = File::open(input)?;
 
+    let num_nodes = &args[2];
+    let num_nodes: usize = num_nodes.parse()?;
+
     // Initial state
-    let mut head_pos = Vec2::new();
-    let mut tail_pos = head_pos;
+    // 'head' is the first in the list, tail nodes are higher indices
+    let mut positions = vec![Vec2::new(); num_nodes];
 
     let mut visited_positions = HashSet::new();
-    // Initial position counts
-    visited_positions.insert(tail_pos);
+    // Initial visited position - always the last tail node
+    visited_positions.insert(*positions.last().unwrap());
 
     // Read and process instructions
     for line in BufReader::new(input).lines() {
@@ -138,21 +145,26 @@ fn main() -> Result<(), Box<dyn Error>> {
         let step_delta = dir_to_delta(dir);
 
         for _ in 0..num_steps {
-            // Take one step updating head & tail positions and tracking coordinates the tail visited
-            head_pos += step_delta;
+            let mut delta = step_delta;
 
-            let distance = head_pos - tail_pos;
+            for idx in 0..positions.len() - 1 {
+                positions[idx] += delta;
 
-            // Basically, if the max distance on any axis is greater than 1
-            // the tail must move closer.
+                // Distance between this and next node in the chain
+                let distance = positions[idx] - positions[idx + 1];
+                if distance.x.abs() > 1 || distance.y.abs() > 1 {
+                    delta = distance.signum();
+                } else {
+                    delta = Vec2::new();
+                    // We can exit early here if we didn't move
+                    break;
+                }
+            }
 
-            if distance.x.abs() > 1 || distance.y.abs() > 1 {
-                // The tail moves closer until it is touching. We can essentially
-                // clamp the distance
-                let tail_delta = distance.signum();
-                tail_pos += tail_delta;
-
-                visited_positions.insert(tail_pos);
+            // If the last tail node should move, move it and update visited positions
+            if delta != Vec2::zero() {
+                *positions.last_mut().unwrap() += delta;
+                visited_positions.insert(*positions.last().unwrap());
             }
         }
     }
