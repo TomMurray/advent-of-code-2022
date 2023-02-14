@@ -49,14 +49,86 @@ impl FromStr for Instruction {
     }
 }
 
+struct XReg {
+    reg: i32,
+    pipeline: Vec<Option<i32>>,
+    pos: usize
+}
+
+impl XReg {
+    fn new(init_val: i32, pipeline_length: usize) -> Self {
+        Self {
+            reg: init_val,
+            pipeline: vec![None; pipeline_length],
+            pos: 0
+        }
+    }
+
+    fn tick(&mut self) {
+        if let Some(val) = self.pipeline[self.pos] {
+            // Add the value
+            self.reg += val;
+            self.pipeline[self.pos] = None;
+        }
+
+        // Increment pos
+        self.pos = (self.pos + 1) % self.pipeline.len();
+    }
+
+    fn issue_add(&mut self, val : i32) {
+        let plen = self.pipeline.len();
+        let last_idx = (self.pos + (plen - 1)) % plen;
+        self.pipeline[last_idx] = Some(val);
+    }
+
+    fn get_curr_val(&self) -> i32 {
+        self.reg
+    }
+}
+
+
+
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let input = &args[1];
     let input = File::open(input)?;
 
-    for line in BufReader::new(input).lines() {
+    // There is a 2 cycle delay before values are updated.
+    // Values are updated 'between' cycles though, so we
+    // insert an extra delay
+    const PIPELINE_LEN: usize = 2;
+
+    let mut xreg = XReg::new(1, PIPELINE_LEN);
+    let mut cycle : i32 = 1;
+
+    let mut res : i32 = 0;
+
+    let mut capture_result = |val, cycle| {
+        res += cycle * val;
+    };
+
+    for line in BufReader::new(input).lines() {        
         let instr: Instruction = line?.parse()?;
+        let cycles = match instr {
+            Instruction::Noop => 1,
+            Instruction::Addx(val) => {
+                xreg.issue_add(val);
+                2
+            }
+        };
+
+        for _ in 0..cycles {
+            if ((cycle + 20) % 40) == 0 {
+                capture_result(xreg.get_curr_val(), cycle);
+            }
+
+            xreg.tick();
+            cycle += 1;
+        }
     }
+
+    // Print result:
+    println!("Result was {}", res);
 
     Ok(())
 }
