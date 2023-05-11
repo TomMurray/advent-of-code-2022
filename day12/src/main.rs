@@ -147,6 +147,63 @@ fn pt1(terrain: &Vec<u8>, dims: Vec2, start: Vec2, end: Vec2) -> u32 {
     distances[end_idx]
 }
 
+fn pt2(terrain: &Vec<u8>, dims: Vec2, starts: &Vec<Vec2>, end: Vec2) -> u32 {
+    // Make the start points into a set
+    let mut end_idxs : HashSet<usize> = starts.into_iter().map(|x| dims.lin(&x)).collect();
+
+    // We'll actually start from the end point, and walk towards the start points.
+    let mut next = MinHeapKeyValue::new();
+
+    let mut visited = vec![false; dims.flatten()];
+    let mut distances = vec![u32::MAX; dims.flatten()];
+
+    let start_idx = dims.lin(&end);
+    visited[start_idx] = true;
+    distances[start_idx] = 0;
+    next.insert(0u32, start_idx);
+
+    let mut min_distance = u32::MAX;
+    while let Some((distance, idx)) = next.pop() {
+        if end_idxs.remove(&idx) {
+            // Update the min distance
+            if distances[idx] < min_distance {
+                min_distance = distances[idx];
+            }
+            // Finish if the set of end indices is empty
+            if end_idxs.is_empty() {
+                break;
+            }
+        }
+        visited[idx] = true;
+        let coord = dims.from_lin(idx);
+
+        for delta in [Vec2::up(), Vec2::right(), Vec2::down(), Vec2::left()] {
+            let neighbour = coord + delta;
+            if neighbour.x < 0 || neighbour.y < 0 || neighbour.x >= dims.x || neighbour.y >= dims.y {
+                continue;
+            }
+            let neighbour_idx = dims.lin(&neighbour);
+            if terrain[neighbour_idx] + 1 < terrain[idx] {
+                continue;
+            }
+
+            if visited[neighbour_idx] {
+                continue;
+            }
+
+            // Otherwise update neighbour's distance, and add it to the set to visit
+            let new_distance = distance + 1;
+            let neighbour_distance = &mut distances[neighbour_idx];
+            if new_distance < *neighbour_distance {
+                *neighbour_distance = new_distance;
+                next.insert_or_decrease_key(neighbour_idx, new_distance);
+            }
+        }
+    }
+
+    min_distance
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     // Basically, parse the input into an array of integer heights, perform A* pathfinding where
     // each position is a node in a graph, and a node is connected to another node if it is
@@ -189,6 +246,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     println!(
         "Shortest distance from start to finish calculated as {}",
         pt1_distance
+    );
+
+    // Part 2
+    let mut starts = vec![];
+    for idx in 0..dims.flatten() {
+        if terrain[idx] == 0 {
+            starts.push(dims.from_lin(idx));
+        }
+    }
+
+    let pt2_distance = pt2(&terrain, dims, &starts, end);
+    println!(
+        "Shortest distance from any point with height 'a' to finish calculated as {}",
+        pt2_distance
     );
 
     Ok(())
