@@ -97,44 +97,7 @@ impl Sub for Vec2 {
     }
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    // Basically, parse the input into an array of integer heights, perform A* pathfinding where
-    // each position is a node in a graph, and a node is connected to another node if it is
-    // neighbouring and the height change is no more than 1.
-
-    let args: Vec<String> = env::args().collect();
-    let input = &args[1];
-    let input = File::open(input)?;
-
-    let mut terrain = vec![];
-    let mut dims = Vec2::new();
-    let (mut start, mut end) = (Vec2::new(), Vec2::new());
-
-    for (y, line) in BufReader::new(input).lines().enumerate() {
-        let line = line?;
-        dims.x = line.len().try_into().unwrap();
-
-        for (x, mut c) in line.bytes().enumerate() {
-            if c == 'S' as u8 {
-                start = Vec2 {
-                    x: x.try_into().unwrap(),
-                    y: y.try_into().unwrap(),
-                };
-                c = 'a' as u8;
-            } else if c == 'E' as u8 {
-                end = Vec2 {
-                    x: x.try_into().unwrap(),
-                    y: y.try_into().unwrap(),
-                };
-                c = 'z' as u8;
-            }
-            assert!(c >= 'a' as u8 && c <= 'z' as u8);
-            terrain.push(c - 'a' as u8);
-        }
-    }
-
-    dims.y = TryInto::<i32>::try_into(terrain.len()).unwrap() / dims.x;
-
+fn pt1(terrain: &Vec<u8>, dims: Vec2, start: Vec2, end: Vec2) -> u32 {
     // Run djikstra's on the graph formed by coordinates in the terrain.
     let mut next = MinHeapKeyValue::new();
 
@@ -181,9 +144,52 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
         }
     }
-    let distance = distances[end_idx];
+    distances[end_idx]
+}
 
-    println!("Distance from start to finish calculated as {}", distance);
+fn main() -> Result<(), Box<dyn Error>> {
+    // Basically, parse the input into an array of integer heights, perform A* pathfinding where
+    // each position is a node in a graph, and a node is connected to another node if it is
+    // neighbouring and the height change is no more than 1.
+
+    let args: Vec<String> = env::args().collect();
+    let input = &args[1];
+    let input = File::open(input)?;
+
+    let mut terrain = vec![];
+    let mut dims = Vec2::new();
+    let (mut start, mut end) = (Vec2::new(), Vec2::new());
+
+    for (y, line) in BufReader::new(input).lines().enumerate() {
+        let line = line?;
+        dims.x = line.len().try_into().unwrap();
+
+        for (x, mut c) in line.bytes().enumerate() {
+            if c == 'S' as u8 {
+                start = Vec2 {
+                    x: x.try_into().unwrap(),
+                    y: y.try_into().unwrap(),
+                };
+                c = 'a' as u8;
+            } else if c == 'E' as u8 {
+                end = Vec2 {
+                    x: x.try_into().unwrap(),
+                    y: y.try_into().unwrap(),
+                };
+                c = 'z' as u8;
+            }
+            assert!(c >= 'a' as u8 && c <= 'z' as u8);
+            terrain.push(c - 'a' as u8);
+        }
+    }
+
+    dims.y = TryInto::<i32>::try_into(terrain.len()).unwrap() / dims.x;
+
+    let pt1_distance = pt1(&terrain, dims, start, end);
+    println!(
+        "Shortest distance from start to finish calculated as {}",
+        pt1_distance
+    );
 
     Ok(())
 }
