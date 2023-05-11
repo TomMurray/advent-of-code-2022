@@ -149,7 +149,7 @@ fn pt1(terrain: &Vec<u8>, dims: Vec2, start: Vec2, end: Vec2) -> u32 {
 
 fn pt2(terrain: &Vec<u8>, dims: Vec2, starts: &Vec<Vec2>, end: Vec2) -> u32 {
     // Make the start points into a set
-    let mut end_idxs : HashSet<usize> = starts.into_iter().map(|x| dims.lin(&x)).collect();
+    let mut end_idxs: HashSet<usize> = starts.into_iter().map(|x| dims.lin(&x)).collect();
 
     // We'll actually start from the end point, and walk towards the start points.
     let mut next = MinHeapKeyValue::new();
@@ -179,7 +179,8 @@ fn pt2(terrain: &Vec<u8>, dims: Vec2, starts: &Vec<Vec2>, end: Vec2) -> u32 {
 
         for delta in [Vec2::up(), Vec2::right(), Vec2::down(), Vec2::left()] {
             let neighbour = coord + delta;
-            if neighbour.x < 0 || neighbour.y < 0 || neighbour.x >= dims.x || neighbour.y >= dims.y {
+            if neighbour.x < 0 || neighbour.y < 0 || neighbour.x >= dims.x || neighbour.y >= dims.y
+            {
                 continue;
             }
             let neighbour_idx = dims.lin(&neighbour);
