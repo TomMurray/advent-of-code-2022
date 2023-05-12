@@ -74,7 +74,6 @@ impl PartialOrd for Entry {
     }
 }
 
-
 fn parse_entry(line: String) -> Result<Entry, Box<dyn Error>> {
     let mut entry_stack = vec![Entry::List(vec![])];
 
@@ -132,16 +131,13 @@ fn parse_entry(line: String) -> Result<Entry, Box<dyn Error>> {
     Ok(entry_stack.pop().unwrap())
 }
 
-
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
     let path = &args[1];
     let file = File::open(path)?;
 
     // Every 2 lines is a pair, with a blank line in between
-    let mut first: Option<Entry> = None;
-    let mut pair_idx: usize = 1;
-    let mut pt1_result: usize = 0;
+    let mut all_entries = vec![];
 
     for line in BufReader::new(file).lines() {
         let line = line?;
@@ -149,21 +145,43 @@ fn main() -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        let e = parse_entry(line)?;
-        if let Some(lhs) = first {
-            // Do the comparison
-            let c = lhs.cmp(&e);
-            if c.is_le() {
-                pt1_result += pair_idx;
-            }
-            pair_idx += 1;
-            first = None;
-        } else {
-            first = Some(e);
+        all_entries.push(parse_entry(line)?);
+    }
+
+    // Part 1
+    let mut pt1_result: usize = 0;
+
+    for i in (0..all_entries.len()).step_by(2) {
+        let lhs = &all_entries[i];
+        let rhs = &all_entries[i + 1];
+        if lhs.cmp(rhs).is_le() {
+            let pair_idx = (i / 2) + 1;
+            pt1_result += pair_idx;
         }
     }
 
     println!("Part 1 result: {}", pt1_result);
+
+    // Part 2
+
+    // Add entries for 'divider packets'
+    let first_divider = Entry::List(vec![Entry::List(vec![Entry::Number(2)])]);
+    all_entries.push(first_divider.clone());
+    let second_divider = Entry::List(vec![Entry::List(vec![Entry::Number(6)])]);
+    all_entries.push(second_divider.clone());
+
+    all_entries.sort();
+
+    // Find the 2 divider packets. Start with the first, then use this to
+    // narrow the range to find the second.
+    let first_idx = all_entries.binary_search(&first_divider).unwrap() + 1;
+    let second_idx = &all_entries[first_idx..all_entries.len()]
+        .binary_search(&second_divider)
+        .unwrap()
+        + 1
+        + first_idx;
+
+    println!("Part 2 result: {}", first_idx * second_idx);
 
     Ok(())
 }
