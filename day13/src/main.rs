@@ -18,11 +18,62 @@ impl fmt::Display for BadInputToken {
 
 impl Error for BadInputToken {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq)]
 enum Entry {
     List(Vec<Entry>),
     Number(i32),
 }
+
+fn compare_lists(lhs: &Vec<Entry>, rhs: &Vec<Entry>) -> Ordering {
+    let mut lhs_it = lhs.into_iter();
+    let mut rhs_it = rhs.into_iter();
+
+    loop {
+        let (lhs, rhs) = (lhs_it.next(), rhs_it.next());
+
+        // The following will return the ordering immediately once it is
+        // no longer ambiguous (i.e. not equal).
+        match (lhs, rhs) {
+            (None, None) => break,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => {
+                return Ordering::Greater;
+            }
+            (Some(lhs), Some(rhs)) => {
+                let res = lhs.cmp(rhs);
+                if res.is_ne() {
+                    return res;
+                }
+            }
+        }
+    }
+
+    Ordering::Equal
+}
+
+impl Ord for Entry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match (self, other) {
+            (Entry::Number(a), Entry::Number(b)) => a.cmp(b),
+            (Entry::List(a), Entry::List(b)) => compare_lists(a, b),
+            (Entry::Number(a), Entry::List(b)) => compare_lists(&vec![Entry::Number(*a)], b),
+            (Entry::List(a), Entry::Number(b)) => compare_lists(a, &vec![Entry::Number(*b)]),
+        }
+    }
+}
+
+impl PartialEq for Entry {
+    fn eq(&self, other: &Self) -> bool {
+        self.cmp(other).is_eq()
+    }
+}
+
+impl PartialOrd for Entry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 
 fn parse_entry(line: String) -> Result<Entry, Box<dyn Error>> {
     let mut entry_stack = vec![Entry::List(vec![])];
@@ -81,41 +132,6 @@ fn parse_entry(line: String) -> Result<Entry, Box<dyn Error>> {
     Ok(entry_stack.pop().unwrap())
 }
 
-fn compare_lists(lhs: &Vec<Entry>, rhs: &Vec<Entry>) -> Ordering {
-    let mut lhs_it = lhs.into_iter();
-    let mut rhs_it = rhs.into_iter();
-
-    loop {
-        let (lhs, rhs) = (lhs_it.next(), rhs_it.next());
-
-        // The following will return the ordering immediately once it is
-        // no longer ambiguous (i.e. not equal).
-        match (lhs, rhs) {
-            (None, None) => break,
-            (None, Some(_)) => return Ordering::Less,
-            (Some(_), None) => {
-                return Ordering::Greater;
-            }
-            (Some(lhs), Some(rhs)) => {
-                let res = compare(lhs, rhs);
-                if res.is_ne() {
-                    return res;
-                }
-            }
-        }
-    }
-
-    Ordering::Equal
-}
-
-fn compare(lhs: &Entry, rhs: &Entry) -> Ordering {
-    match (&lhs, &rhs) {
-        (Entry::Number(a), Entry::Number(b)) => a.cmp(b),
-        (Entry::List(a), Entry::List(b)) => compare_lists(a, b),
-        (Entry::Number(a), Entry::List(b)) => compare_lists(&vec![Entry::Number(*a)], b),
-        (Entry::List(a), Entry::Number(b)) => compare_lists(a, &vec![Entry::Number(*b)]),
-    }
-}
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<String> = env::args().collect();
@@ -136,7 +152,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let e = parse_entry(line)?;
         if let Some(lhs) = first {
             // Do the comparison
-            let c = compare(&lhs, &e);
+            let c = lhs.cmp(&e);
             if c.is_le() {
                 pt1_result += pair_idx;
             }
