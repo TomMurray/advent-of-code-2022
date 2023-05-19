@@ -245,17 +245,41 @@ fn main() -> Result<(), Box<dyn Error>> {
     max.x = cmp::max(max.x, SPAWN.x);
     max.y = cmp::max(max.y, SPAWN.y);
 
+    const PART2: bool = true;
+    if PART2 {
+        // Also, if this is part 2, consider that there is an infinite horizontal plane at max.y + 2.
+        // The condition to finish is that the spawn point is covered. We know that in the worst case
+        // this will happen when there is a pyramid formed by sand with its peak at the spawn point.
+        // For this we need horizontal bounds to be wide enough to capture this pyramid.
+        max.y += 2;
+
+        min.x = cmp::min(min.x, SPAWN.x - max.y - 1);
+        max.x = cmp::max(max.x, SPAWN.x + max.y + 1);
+    }
+
     max.x += 1;
     max.y += 1;
 
     // Setup the sim
     let mut sim = Sim::new(max - min, min);
 
-    println!("Before adding lines:\n{}", &sim);
     for line in &lines {
         sim.add_line(&line);
     }
-    println!("After adding lines:\n{}", &sim);
+
+    if PART2 {
+        // In part 2, add a line along the bottom
+        sim.add_line(&vec![
+            Vec2 {
+                x: min.x,
+                y: max.y - 1,
+            },
+            Vec2 {
+                x: max.x - 1,
+                y: max.y - 1,
+            },
+        ]);
+    }
 
     // There are 2 states to the simulation, when we're dropping a
     // block of sand in, it is the only thing that moves until it
@@ -263,6 +287,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut settled_count = 0;
     'outer: loop {
         let mut next_coord = SPAWN;
+        sim.set(next_coord, 'o');
 
         // Iterate until at rest or off-screen
         loop {
@@ -270,7 +295,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let immediately_below = next_coord + Vec2::down();
             if let Some(content) = sim.get(immediately_below) {
                 if content == '.' {
+                    sim.set(next_coord, '.');
                     next_coord = immediately_below;
+                    sim.set(next_coord, 'o');
                     continue;
                 }
             } else {
@@ -280,7 +307,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let to_the_left = next_coord + Vec2::down() + Vec2::left();
             if let Some(content) = sim.get(to_the_left) {
                 if content == '.' {
+                    sim.set(next_coord, '.');
                     next_coord = to_the_left;
+                    sim.set(next_coord, 'o');
                     continue;
                 }
             } else {
@@ -291,7 +320,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             let to_the_right = next_coord + Vec2::down() + Vec2::right();
             if let Some(content) = sim.get(to_the_right) {
                 if content == '.' {
+                    sim.set(next_coord, '.');
                     next_coord = to_the_right;
+                    sim.set(next_coord, 'o');
                     continue;
                 }
             } else {
@@ -299,8 +330,10 @@ fn main() -> Result<(), Box<dyn Error>> {
             }
 
             // If none of the above were air, the sand comes to rest.
-            sim.set(next_coord, 'o');
             settled_count += 1;
+            if PART2 && next_coord == SPAWN {
+                break 'outer;
+            }
             break;
         }
     }
